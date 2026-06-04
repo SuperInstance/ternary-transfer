@@ -1,0 +1,11 @@
+[package]
+name = "ternary-transfer"
+version = "0.1.0"
+edition = "2021"
+description = "Transfer learning for ternary agents — apply knowledge from one environment to another"
+license = "MIT"
+repository = "https://github.com/SuperInstance/ternary-transfer"
+keywords = ["ternary", "transfer-learning", "agent"]
+categories = ["science", "algorithms"]
+
+[dev-dependencies]
