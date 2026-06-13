@@ -1,126 +1,131 @@
 # ternary-transfer
 
-Transfer learning for ternary agents — take knowledge learned in one environment and apply it to a new one.
+Transfer learning library for ternary agents — take knowledge learned in one environment and apply it to a new one, using the **{-1, 0, +1}** trit algebra as the shared representation for feature weights and domain comparisons.
 
-## Overview
+## Why It Matters
 
-This crate implements transfer learning in the context of ternary agents whose knowledge is represented as ternary values (Negative / Neutral / Positive). It provides strategies to transfer learned knowledge from a **source task** to a **target task**, measure the domain gap between them, score the effectiveness of the transfer, and detect when transfer hurts performance (negative transfer).
+Transfer learning is the single biggest lever for reducing sample complexity in RL and agent-based systems. When two tasks share structure, a good transfer can cut learning time by orders of magnitude. When they don't, **negative transfer** — applying irrelevant or misleading knowledge — can set you back further than starting from scratch.
 
-## Core Concepts
+This crate provides a principled framework for that decision: measure the **domain gap** between source and target, score the expected benefit, and detect negative transfer before it corrupts your agent.
 
-### Ternary Values
+## How It Works
 
-Knowledge is expressed using three-valued logic:
+### Knowledge Representation
 
-| Value | Meaning |
-|-------|---------|
-| `Negative` (-1) | Feature hurts performance |
-| `Neutral` (0) | Feature has no effect |
-| `Positive` (+1) | Feature helps performance |
+Each agent's learned knowledge is stored as a `KnowledgeMatrix` — a vector of weights in **[-1.0, 1.0]**, each with a ternary sign (Negative / Neutral / Positive):
 
-### SourceTask & TargetTask
+```
+w_i ∈ [-1, 1],  sign(w_i) ∈ {−1, 0, +1}
+```
 
-- **SourceTask**: The environment where knowledge was originally learned. Contains a knowledge matrix (learned weights) and feature descriptors.
-- **TargetTask**: The new environment to transfer knowledge to. May have a baseline knowledge state.
+The ternary sign is thresholded at ±0.33, matching the three-valued logic used throughout the ternary ecosystem.
 
-### TransferStrategy
+### Domain Gap
 
-Four strategies for transferring knowledge:
+The domain gap between source **S** and target **T** is a weighted metric:
 
-| Strategy | Description |
-|----------|-------------|
-| `DirectCopy` | Copy source knowledge directly to the target |
-| `WeightedBlend` | Blend source and target knowledge with a weight parameter α |
-| `SelectiveTransfer` | Transfer only selected feature indices |
-| `Progressive` | Iteratively blend with decaying α for gradual transfer |
+```
+gap(S, T) = 0.4 · (1 − overlap) + 0.3 · Δ_importance + 0.3 · Δ_bias
+```
 
-### TransferScore
+Where:
+- **overlap** = 2|shared features| / (|S| + |T|) — Jaccard-like feature overlap
+- **Δ_importance** = mean absolute difference in feature importance over shared features
+- **Δ_bias** = fraction of shared features where ternary bias disagrees
 
-Measures how much the transfer helped (or hurt):
+**Complexity:** O(n + m) where n = source features, m = target features.
 
-- **estimated_performance**: Predicted performance after transfer (0.0–1.0)
-- **improvement**: Delta over baseline (positive = helpful)
-- **relative_improvement**: Ratio of improvement to baseline
-- **confidence**: How reliable the estimate is (based on feature overlap)
+### Transfer Strategies
 
-### DomainGap
+| Strategy | Formula | When to use |
+|---|---|---|
+| **DirectCopy** | w_target[i] ← w_source[i] | gap < 0.2 |
+| **WeightedBlend** | w ← α·w_source + (1−α)·w_target | gap < 0.4 |
+| **SelectiveTransfer** | w_target[idx] ← w_source[idx] only | gap < 0.6 |
+| **Progressive** | w ← blend, α *= decay per step | gap ≥ 0.6 |
 
-Measures the distance between source and target domains:
+### Transfer Score
 
-- **gap**: Overall distance (0.0 = identical, 1.0 = completely different)
-- **feature_overlap**: Ratio of shared features
-- **importance_divergence**: How much feature importance differs
-- **bias_disagreement**: How much ternary biases disagree
+Estimated performance after transfer:
 
-Recommends a strategy based on gap severity.
+```
+P_est = clamp(P_baseline + 0.3 · alignment + 0.2 · P_source, 0, 1)
+```
 
-### NegativeTransferDetector
+Where alignment rewards matching the target's ternary bias weighted by feature importance.
 
-Detects when transfer would hurt performance. Provides risk levels (Low, Medium, High, Critical) and actionable recommendations.
+### Negative Transfer Detection
+
+Negative transfer is flagged when:
+- `improvement < −0.05`, OR
+- `domain_gap > 0.7` AND `confidence < 0.3`
+
+Risk levels: **Low** (gap < 0.4) → **Medium** (< 0.6) → **High** (< 0.8) → **Critical** (≥ 0.8).
 
 ## Quick Start
 
 ```rust
 use ternary_transfer::*;
 
-// Define features for source and target tasks
-let features = vec![
-    task::FeatureDescriptor {
-        name: "speed".into(),
-        importance: 0.8,
-        ternary_bias: Ternary::Positive,
-    },
-    task::FeatureDescriptor {
-        name: "size".into(),
-        importance: 0.5,
-        ternary_bias: Ternary::Negative,
-    },
-];
-
-// Create source task with learned knowledge
+// Define source task with learned knowledge
 let source = SourceTask::new(
-    "maze-navigation",
-    features.clone(),
-    KnowledgeMatrix::new(vec![0.9, -0.7]),
+    "navigation-v1",
+    vec![
+        FeatureDescriptor { name: "speed".into(), importance: 0.8, ternary_bias: Ternary::Positive },
+        FeatureDescriptor { name: "obstacle".into(), importance: 0.9, ternary_bias: Ternary::Negative },
+    ],
+    KnowledgeMatrix::new(vec![0.9, -0.8]),
 );
 
-// Create target task
-let target = TargetTask::new("obstacle-course", features);
-
-// Choose a transfer strategy
-let strategy = TransferStrategy::WeightedBlend { alpha: 0.7 };
+// Define target task
+let target = TargetTask::new(
+    "navigation-v2",
+    vec![
+        FeatureDescriptor { name: "speed".into(), importance: 0.7, ternary_bias: Ternary::Positive },
+        FeatureDescriptor { name: "obstacle".into(), importance: 0.85, ternary_bias: Ternary::Negative },
+    ],
+);
 
 // Execute transfer
-let result = strategy.execute(&source, &target);
+let result = TransferStrategy::WeightedBlend { alpha: 0.7 }
+    .execute(&source, &target);
 
-println!("Estimated performance: {:.2}", result.score.estimated_performance);
-println!("Improvement: {:.2}", result.score.improvement);
+println!("Improvement: {:.3}", result.score.improvement);
 println!("Negative transfer: {}", result.negative_detected);
-println!("Domain gap: {:.2}", result.domain_gap.gap);
 ```
 
-## Requirements
+## API
 
-- Pure Rust, no `unsafe`, no external dependencies
-- Edition 2021
-- MIT licensed
+| Type | Purpose |
+|---|---|
+| `SourceTask` | Domain where knowledge was originally learned |
+| `TargetTask` | New domain to transfer knowledge into |
+| `KnowledgeMatrix` | Weight vector with ternary sign classification |
+| `TransferStrategy` | Enum: DirectCopy, WeightedBlend, SelectiveTransfer, Progressive |
+| `DomainGap` | Measures feature overlap, importance divergence, bias disagreement |
+| `TransferScore` | Estimated performance, improvement, confidence |
+| `NegativeTransferDetector` | Detects and risk-assesses negative transfer |
+| `TransferResult` | Bundled output: knowledge + score + gap + negative flag |
 
-## Running Tests
+## Architecture Notes
 
-```bash
-cargo test
+The ternary ecosystem rests on a **conservation law**: the sum of agent population fractions γ (choose) + η (avoid) must equal the total active population, with the remainder in the neutral (unknown) state. Transfer learning shifts these fractions by moving weights — a DirectCopy pushes the target toward the source's γ+η distribution, while a WeightedBlend interpolates between two distributions. The domain gap quantifies how far apart those distributions are.
+
+`KnowledgeMatrix::cosine_similarity` provides the vector-space view of this relationship:
+
+```
+cos(θ) = (w_S · w_T) / (‖w_S‖ · ‖w_T‖)
 ```
 
-21 tests covering all core functionality.
+This is the same inner-product geometry used in the correlation metrics of `ternary-tuple` and the ballot tallies of `warp-ternary-vote`.
+
+## References
+
+- Pan, S. J. & Yang, Q. (2010). *"A Survey on Transfer Learning."* IEEE TKDD.
+- Rosenstein, M. T. et al. (2005). *"Transfer Learning with Risk of Negative Transfer."* ICML.
+- Yosinski, J. et al. (2014). *"How Transferable Are Features in Deep Neural Networks?"* NeurIPS.
+- Torrey, L. & Shavlik, J. (2010). *"Transfer Learning."* Handbook of Research on Machine Learning.
 
 ## License
 
 MIT
-
-## See Also
-- **ternary-fitness** — related
-- **ternary-ensemble** — related
-- **ternary-federated** — related
-- **ternary-ga** — related
-- **ternary-curriculum** — related
-
