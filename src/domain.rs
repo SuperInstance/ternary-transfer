@@ -1,6 +1,7 @@
 //! Domain gap: measure the distance between source and target domains.
 
 use crate::{SourceTask, TargetTask};
+use std::collections::HashMap;
 
 /// Measures how different two domains are.
 #[derive(Debug, Clone, PartialEq)]
@@ -17,37 +18,43 @@ pub struct DomainGap {
 
 impl DomainGap {
     /// Compute domain gap between source and target.
+    ///
+    /// Runs in O(n + m) where n = source features and m = target features:
+    /// the target features are indexed once in a hash map, then the source
+    /// features are scanned once with O(1) lookups.
     pub fn compute(source: &SourceTask, target: &TargetTask) -> Self {
-        let source_names: Vec<&str> = source.feature_names();
-        let target_names: Vec<&str> = target.feature_names();
-
-        // Feature overlap
-        let total_features = source_names.len() + target_names.len();
-        let shared: Vec<&str> = source_names
+        // Index target features by name for O(1) lookup. If the target has
+        // duplicate names, the last occurrence wins (same observable matching
+        // behavior as the previous linear `find`).
+        let target_index: HashMap<&str, &crate::task::FeatureDescriptor> = target
+            .features
             .iter()
-            .filter(|n| target_names.contains(n))
-            .copied()
+            .map(|f| (f.name.as_str(), f))
             .collect();
-        let overlap = if total_features > 0 {
-            2.0 * shared.len() as f64 / total_features as f64
-        } else {
-            0.0
-        };
 
-        // Importance divergence for shared features
-        let mut importance_diff = 0.0;
-        let mut bias_diff = 0;
-        let mut shared_count = 0;
+        let total_features = source.features.len() + target.features.len();
+
+        let mut shared_count = 0usize;
+        let mut importance_diff = 0.0f64;
+        let mut bias_diff = 0usize;
 
         for sf in &source.features {
-            if let Some(tf) = target.features.iter().find(|f| f.name == sf.name) {
+            if let Some(tf) = target_index.get(sf.name.as_str()) {
+                shared_count += 1;
                 importance_diff += (sf.importance - tf.importance).abs();
                 if sf.ternary_bias != tf.ternary_bias {
                     bias_diff += 1;
                 }
-                shared_count += 1;
             }
         }
+
+        // overlap = 2|shared| / (|S| + |T|), counting each source feature whose
+        // name appears in the target (matches the previously documented ratio).
+        let overlap = if total_features > 0 {
+            2.0 * shared_count as f64 / total_features as f64
+        } else {
+            0.0
+        };
 
         let importance_div = if shared_count > 0 {
             importance_diff / shared_count as f64
