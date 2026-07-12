@@ -74,16 +74,21 @@ impl KnowledgeMatrix {
     }
 
     /// Create a random-ish knowledge matrix (deterministic from seed).
+    ///
+    /// Weights are spread across the full [-1.0, 1.0] range using a simple
+    /// LCG. The output is deterministic for a given `(count, seed)` pair and
+    /// is suitable for tests/fixtures, not cryptography.
     pub fn from_seed(count: usize, seed: u64) -> Self {
         let mut weights = Vec::with_capacity(count);
         let mut s = seed;
         for _ in 0..count {
-            // Simple LCG for deterministic pseudo-random values
+            // Simple LCG for deterministic pseudo-random values.
             s = s
                 .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
-            let raw = ((s >> 33) as i64) as f64 / (1i64 << 31) as f64;
-            weights.push(raw.clamp(-1.0, 1.0));
+            // Top 31 bits → [0, 1), then affine-shift to [-1, 1).
+            let unit = ((s >> 33) as i64) as f64 / (1i64 << 31) as f64;
+            weights.push((2.0 * unit - 1.0).clamp(-1.0, 1.0));
         }
         Self {
             weights,
@@ -137,14 +142,20 @@ impl KnowledgeMatrix {
     }
 
     /// Element-wise weighted blend with another matrix.
+    ///
+    /// Returns `self * alpha + other * (1 - alpha)` per element, with `alpha`
+    /// clamped to [0, 1]. The result has the length of the longer input;
+    /// missing entries from the shorter side are treated as 0.0. Each element
+    /// is clamped to [-1, 1].
     pub fn blend(&self, other: &KnowledgeMatrix, alpha: f64) -> KnowledgeMatrix {
         let alpha = alpha.clamp(0.0, 1.0);
-        let weights: Vec<f64> = self
-            .weights
-            .iter()
-            .zip(other.weights.iter())
-            .map(|(&a, &b)| (a * alpha + b * (1.0 - alpha)).clamp(-1.0, 1.0))
-            .collect();
+        let len = self.feature_count.max(other.feature_count);
+        let mut weights = Vec::with_capacity(len);
+        for i in 0..len {
+            let a = self.weights.get(i).copied().unwrap_or(0.0);
+            let b = other.weights.get(i).copied().unwrap_or(0.0);
+            weights.push((a * alpha + b * (1.0 - alpha)).clamp(-1.0, 1.0));
+        }
         KnowledgeMatrix::new(weights)
     }
 }

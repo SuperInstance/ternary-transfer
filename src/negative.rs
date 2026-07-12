@@ -15,7 +15,7 @@ impl NegativeTransferDetector {
     pub fn new() -> Self {
         Self {
             threshold: -0.05,
-            gap_risk_threshold: 0.6,
+            gap_risk_threshold: 0.7,
         }
     }
 
@@ -47,11 +47,11 @@ impl NegativeTransferDetector {
         let detected = score.improvement < self.threshold
             || (gap.gap > self.gap_risk_threshold && score.confidence < 0.3);
 
-        let risk_level = if gap.gap > 0.8 {
+        let risk_level = if gap.gap >= 0.8 {
             RiskLevel::Critical
-        } else if gap.gap > 0.6 {
+        } else if gap.gap >= 0.6 {
             RiskLevel::High
-        } else if gap.gap > 0.4 {
+        } else if gap.gap >= 0.4 {
             RiskLevel::Medium
         } else {
             RiskLevel::Low
