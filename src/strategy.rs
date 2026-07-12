@@ -1,6 +1,9 @@
 //! Transfer strategies: how to move knowledge from source to target.
 
-use crate::{KnowledgeMatrix, SourceTask, TargetTask, TransferResult, DomainGap, TransferScore, NegativeTransferDetector};
+use crate::{
+    DomainGap, KnowledgeMatrix, NegativeTransferDetector, SourceTask, TargetTask, TransferResult,
+    TransferScore,
+};
 
 /// How to transfer knowledge between tasks.
 #[derive(Debug, Clone, PartialEq)]
@@ -12,7 +15,11 @@ pub enum TransferStrategy {
     /// Transfer only features that are shared between source and target.
     SelectiveTransfer { feature_indices: Vec<usize> },
     /// Progressive transfer: start with high alpha, decay over steps.
-    Progressive { initial_alpha: f64, decay: f64, steps: usize },
+    Progressive {
+        initial_alpha: f64,
+        decay: f64,
+        steps: usize,
+    },
 }
 
 impl TransferStrategy {
@@ -25,21 +32,23 @@ impl TransferStrategy {
             TransferStrategy::DirectCopy => {
                 let count = target.feature_count().min(source.knowledge.feature_count());
                 let mut weights = vec![0.0; target.feature_count()];
-                for i in 0..count {
-                    weights[i] = source.knowledge.weights()[i];
-                }
+                weights[..count].copy_from_slice(&source.knowledge.weights()[..count]);
                 KnowledgeMatrix::new(weights)
             }
 
             TransferStrategy::WeightedBlend { alpha } => {
-                let baseline = target.baseline_knowledge.as_ref()
+                let baseline = target
+                    .baseline_knowledge
+                    .as_ref()
                     .unwrap_or(&default_baseline);
                 source.knowledge.blend(baseline, *alpha)
             }
 
             TransferStrategy::SelectiveTransfer { feature_indices } => {
                 let mut weights = vec![0.0; target.feature_count()];
-                let baseline = target.baseline_knowledge.as_ref()
+                let baseline = target
+                    .baseline_knowledge
+                    .as_ref()
                     .unwrap_or(&default_baseline);
 
                 // Start with baseline
@@ -54,8 +63,14 @@ impl TransferStrategy {
                 KnowledgeMatrix::new(weights)
             }
 
-            TransferStrategy::Progressive { initial_alpha, decay, steps } => {
-                let baseline = target.baseline_knowledge.as_ref()
+            TransferStrategy::Progressive {
+                initial_alpha,
+                decay,
+                steps,
+            } => {
+                let baseline = target
+                    .baseline_knowledge
+                    .as_ref()
                     .unwrap_or(&default_baseline);
                 let mut alpha = *initial_alpha;
                 let mut current = baseline.clone();

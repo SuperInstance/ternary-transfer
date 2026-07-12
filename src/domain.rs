@@ -23,7 +23,8 @@ impl DomainGap {
 
         // Feature overlap
         let total_features = source_names.len() + target_names.len();
-        let shared: Vec<&str> = source_names.iter()
+        let shared: Vec<&str> = source_names
+            .iter()
             .filter(|n| target_names.contains(n))
             .copied()
             .collect();

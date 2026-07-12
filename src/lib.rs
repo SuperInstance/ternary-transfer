@@ -59,7 +59,10 @@ impl KnowledgeMatrix {
     pub fn new(weights: Vec<f64>) -> Self {
         let feature_count = weights.len();
         let weights: Vec<f64> = weights.into_iter().map(|w| w.clamp(-1.0, 1.0)).collect();
-        Self { weights, feature_count }
+        Self {
+            weights,
+            feature_count,
+        }
     }
 
     /// Create a zero knowledge matrix of the given size.
@@ -76,11 +79,16 @@ impl KnowledgeMatrix {
         let mut s = seed;
         for _ in 0..count {
             // Simple LCG for deterministic pseudo-random values
-            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            s = s
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             let raw = ((s >> 33) as i64) as f64 / (1i64 << 31) as f64;
             weights.push(raw.clamp(-1.0, 1.0));
         }
-        Self { weights, feature_count: count }
+        Self {
+            weights,
+            feature_count: count,
+        }
     }
 
     pub fn feature_count(&self) -> usize {
@@ -95,12 +103,14 @@ impl KnowledgeMatrix {
     pub fn ternary_signs(&self) -> Vec<Ternary> {
         self.weights
             .iter()
-            .map(|&w| if w < -0.33 {
-                Ternary::Negative
-            } else if w > 0.33 {
-                Ternary::Positive
-            } else {
-                Ternary::Neutral
+            .map(|&w| {
+                if w < -0.33 {
+                    Ternary::Negative
+                } else if w > 0.33 {
+                    Ternary::Positive
+                } else {
+                    Ternary::Neutral
+                }
             })
             .collect()
     }
@@ -119,13 +129,20 @@ impl KnowledgeMatrix {
             norm_b += other.weights[i] * other.weights[i];
         }
         let denom = norm_a.sqrt() * norm_b.sqrt();
-        if denom == 0.0 { 0.0 } else { dot / denom }
+        if denom == 0.0 {
+            0.0
+        } else {
+            dot / denom
+        }
     }
 
     /// Element-wise weighted blend with another matrix.
     pub fn blend(&self, other: &KnowledgeMatrix, alpha: f64) -> KnowledgeMatrix {
         let alpha = alpha.clamp(0.0, 1.0);
-        let weights: Vec<f64> = self.weights.iter().zip(other.weights.iter())
+        let weights: Vec<f64> = self
+            .weights
+            .iter()
+            .zip(other.weights.iter())
             .map(|(&a, &b)| (a * alpha + b * (1.0 - alpha)).clamp(-1.0, 1.0))
             .collect();
         KnowledgeMatrix::new(weights)

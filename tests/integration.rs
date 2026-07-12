@@ -1,11 +1,15 @@
 #[cfg(test)]
 mod tests {
-    use ternary_transfer::*;
-    use ternary_transfer::task;
     use ternary_transfer::negative;
+    use ternary_transfer::task;
+    use ternary_transfer::*;
 
     fn make_feature(name: &str, importance: f64, bias: Ternary) -> task::FeatureDescriptor {
-        task::FeatureDescriptor { name: name.to_string(), importance, ternary_bias: bias }
+        task::FeatureDescriptor {
+            name: name.to_string(),
+            importance,
+            ternary_bias: bias,
+        }
     }
 
     fn make_source(weights: Vec<f64>) -> SourceTask {
@@ -59,7 +63,10 @@ mod tests {
     fn knowledge_matrix_ternary_signs() {
         let km = KnowledgeMatrix::new(vec![-0.5, 0.0, 0.8]);
         let signs = km.ternary_signs();
-        assert_eq!(signs, vec![Ternary::Negative, Ternary::Neutral, Ternary::Positive]);
+        assert_eq!(
+            signs,
+            vec![Ternary::Negative, Ternary::Neutral, Ternary::Positive]
+        );
     }
 
     #[test]
@@ -99,7 +106,11 @@ mod tests {
         let source = make_source(vec![0.5, 0.5]);
         let target = make_target(2);
         let gap = DomainGap::compute(&source, &target);
-        assert!(gap.gap < 0.1, "identical tasks should have low gap, got {}", gap.gap);
+        assert!(
+            gap.gap < 0.1,
+            "identical tasks should have low gap, got {}",
+            gap.gap
+        );
         assert!(gap.feature_overlap > 0.9);
     }
 
@@ -110,15 +121,29 @@ mod tests {
         let target_features = vec![make_feature("z", 0.1, Ternary::Positive)];
         let target = TargetTask::new("tgt", target_features);
         let gap = DomainGap::compute(&source, &target);
-        assert!(gap.gap > 0.5, "unrelated tasks should have high gap, got {}", gap.gap);
+        assert!(
+            gap.gap > 0.5,
+            "unrelated tasks should have high gap, got {}",
+            gap.gap
+        );
     }
 
     #[test]
     fn domain_gap_recommend_strategy() {
-        let close = DomainGap { gap: 0.1, feature_overlap: 1.0, importance_divergence: 0.0, bias_disagreement: 0.0 };
+        let close = DomainGap {
+            gap: 0.1,
+            feature_overlap: 1.0,
+            importance_divergence: 0.0,
+            bias_disagreement: 0.0,
+        };
         assert_eq!(close.recommend_strategy(), "direct_copy");
 
-        let distant = DomainGap { gap: 0.8, feature_overlap: 0.0, importance_divergence: 1.0, bias_disagreement: 1.0 };
+        let distant = DomainGap {
+            gap: 0.8,
+            feature_overlap: 0.0,
+            importance_divergence: 1.0,
+            bias_disagreement: 1.0,
+        };
         assert_eq!(distant.recommend_strategy(), "progressive");
     }
 
@@ -148,7 +173,9 @@ mod tests {
     fn selective_transfer() {
         let source = make_source(vec![1.0, -1.0, 0.5]);
         let target = make_target(3);
-        let strategy = TransferStrategy::SelectiveTransfer { feature_indices: vec![0, 2] };
+        let strategy = TransferStrategy::SelectiveTransfer {
+            feature_indices: vec![0, 2],
+        };
         let result = strategy.execute(&source, &target);
         assert_eq!(result.knowledge.weights()[0], 1.0);
         assert_eq!(result.knowledge.weights()[1], 0.0); // not selected
@@ -159,7 +186,11 @@ mod tests {
     fn progressive_transfer() {
         let source = make_source(vec![1.0]);
         let target = make_target(1);
-        let strategy = TransferStrategy::Progressive { initial_alpha: 0.9, decay: 0.5, steps: 5 };
+        let strategy = TransferStrategy::Progressive {
+            initial_alpha: 0.9,
+            decay: 0.5,
+            steps: 5,
+        };
         let result = strategy.execute(&source, &target);
         // Should converge somewhere between 0 and 1
         assert!(result.knowledge.weights()[0] > 0.0);
@@ -196,7 +227,12 @@ mod tests {
             relative_improvement: 0.3,
             confidence: 0.9,
         };
-        let gap = DomainGap { gap: 0.2, feature_overlap: 0.9, importance_divergence: 0.1, bias_disagreement: 0.0 };
+        let gap = DomainGap {
+            gap: 0.2,
+            feature_overlap: 0.9,
+            importance_divergence: 0.1,
+            bias_disagreement: 0.0,
+        };
         assert!(!NegativeTransferDetector::detect(&score, &gap));
     }
 
@@ -208,7 +244,12 @@ mod tests {
             relative_improvement: -0.4,
             confidence: 0.5,
         };
-        let gap = DomainGap { gap: 0.3, feature_overlap: 0.5, importance_divergence: 0.3, bias_disagreement: 0.2 };
+        let gap = DomainGap {
+            gap: 0.3,
+            feature_overlap: 0.5,
+            importance_divergence: 0.3,
+            bias_disagreement: 0.2,
+        };
         assert!(NegativeTransferDetector::detect(&score, &gap));
     }
 
@@ -221,7 +262,12 @@ mod tests {
             relative_improvement: 0.15,
             confidence: 0.8,
         };
-        let gap = DomainGap { gap: 0.3, feature_overlap: 0.8, importance_divergence: 0.2, bias_disagreement: 0.1 };
+        let gap = DomainGap {
+            gap: 0.3,
+            feature_overlap: 0.8,
+            importance_divergence: 0.2,
+            bias_disagreement: 0.1,
+        };
         let report = detector.analyze(&score, &gap);
         assert!(!report.negative_detected);
         assert_eq!(report.risk_level, negative::RiskLevel::Low);
