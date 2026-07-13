@@ -25,9 +25,8 @@ impl TransferScore {
     ) -> Self {
         // Estimate performance: weighted sum of transferred knowledge alignment
         // with target feature importance
-        let target_importance: Vec<f64> = target.features.iter()
-            .map(|f| f.importance.abs())
-            .collect();
+        let target_importance: Vec<f64> =
+            target.features.iter().map(|f| f.importance.abs()).collect();
 
         let total_importance: f64 = target_importance.iter().sum();
         if total_importance == 0.0 || transferred.feature_count() == 0 {

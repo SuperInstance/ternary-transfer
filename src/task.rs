@@ -5,8 +5,13 @@ use crate::{KnowledgeMatrix, Ternary};
 /// A feature descriptor for a task domain.
 #[derive(Debug, Clone, PartialEq)]
 pub struct FeatureDescriptor {
+    /// Name of the feature. Used to match features across source and target.
     pub name: String,
+    /// How important this feature is to its task. Expected in [0.0, 1.0];
+    /// the absolute value is what the scoring math actually consumes, but
+    /// callers should keep it non-negative.
     pub importance: f64,
+    /// The expected ternary direction of this feature's weight.
     pub ternary_bias: Ternary,
 }
 
